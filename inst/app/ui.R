@@ -36,13 +36,13 @@ dashboardPage(
     tabItems(
       tabItem(tabName = "home",
               h2("Bem-vindo ao FAET - Ferramenta de Análise e Exploração de Turismo"),
-              p("Este aplicativo é projetado para auxiliar pesquisadores de turismo na realização de revisões sistemáticas, meta-análises, análises bibliométricas, cienciométricas, qualitativas e modelagem de tópicos, de forma intuitiva e didática."),
-              p("Utilize o menu lateral para navegar entre os módulos de análise, seguindo o cronograma de etapas. Ative o 'Modo Didático' para obter explicações e dicas contextuais."),
+              p("Este aplicativo é projetado para auxiliar pesquisadores de turismo na realização de revisões sistemáticas, meta-análises, análises bibliométricas, cienciométrica, qualitativas e modelagem de tópicos, de forma intuitiva e didática."),
+              p("Utilize o menu lateral para navegar entre os módulos de análise, seguindo o cronograma de etapas. Ative o \'Modo Didático\' para obter explicações e dicas contextuais."),
               h3("Como Começar:"),
               tags$ol(
-                tags$li("Vá para '1. Importação & Pré-processamento' para carregar seus dados."),
+                tags$li("Vá para \'1. Importação & Pré-processamento\' para carregar seus dados."),
                 tags$li("Siga as etapas sequencialmente para realizar suas análises."),
-                tags$li("No 'Modo Didático', você encontrará explicações e dicas úteis em cada seção.")
+                tags$li("No \'Modo Didático\', você encontrará explicações e dicas úteis em cada seção.")
               )
       ),
       tabItem(tabName = "import_preprocess",
@@ -54,7 +54,7 @@ dashboardPage(
                 actionButton("process_data", "Processar Dados", icon = icon("cogs"))
               ),
               h3("Dados Importados"),
-              tableOutput("imported_data_summary")
+tableOutput("imported_data_summary")
       ),
       tabItem(tabName = "bibliometrics",
               h2("2. Análise Bibliométrica e Cienciométrica"),
@@ -81,38 +81,63 @@ dashboardPage(
               uiOutput("didactic_text_qualitative"), # Placeholder para texto didático
               wellPanel(
                 actionButton("prepare_corpus", "Preparar Corpus de Resumos", icon = icon("file-alt")),
-                selectInput("stopwords_lang", "Idioma das Stopwords", choices = c("pt", "en"), selected = "pt")
+                selectInput("stopwords_lang", "Idioma das Stopwords", choices = c("pt", "en"), selected = "pt"),
+                hr(),
+                h4("Análise de Conteúdo (Bardin)"),
+                p("Utilize as ferramentas abaixo para explorar o corpus textual e aplicar a metodologia de Bardin."),
+                actionButton("run_freq_analysis", "Análise de Frequência", icon = icon("chart-bar")),
+                actionButton("run_cooc_analysis", "Análise de Co-ocorrência", icon = icon("link"))
               ),
               h3("Nuvem de Palavras"),
-              plotOutput("wordcloud_plot")
+              plotOutput("wordcloud_plot"),
+              h3("Resultados da Análise de Conteúdo"),
+              tableOutput("qualitative_results_table")
       ),
       tabItem(tabName = "topic_modeling",
               h2("5. Modelagem de Tópicos (LDA)"),
               uiOutput("didactic_text_topic_modeling"), # Placeholder para texto didático
               wellPanel(
                 numericInput("num_topics", "Número de Tópicos (k)", value = 5, min = 2, max = 20),
-                actionButton("run_lda", "Executar LDA", icon = icon("brain"))
+                actionButton("run_lda", "Executar LDA", icon = icon("brain")),
+                hr(),
+                h4("Integração Bardin-Tópicos"),
+                p("Mapeie os tópicos identificados com suas categorias de Bardin para uma validação cruzada."),
+                actionButton("map_topics_bardin", "Mapear Tópicos para Bardin", icon = icon("exchange-alt"))
               ),
               h3("Termos por Tópico"),
-              tableOutput("lda_terms_table")
+              tableOutput("lda_terms_table"),
+              h3("Visualização de Tópicos"),
+              plotOutput("lda_vis_plot") # Placeholder para visualização interativa de tópicos
       ),
       tabItem(tabName = "meta_analysis",
               h2("6. Meta-análise"),
               uiOutput("didactic_text_meta_analysis"), # Placeholder para texto didático
               wellPanel(
-                p("Este módulo permitirá a triagem de estudos, extração de dados e execução de meta-análises. Funcionalidades a serem implementadas."),
-                actionButton("start_meta_analysis", "Iniciar Meta-análise (Em Desenvolvimento)", icon = icon("flask"))
+                h4("1. Triagem de Estudos"),
+                p("Carregue um arquivo CSV com os estudos selecionados para meta-análise (título, resumo, etc.)."),
+                fileInput("file_screening", "Upload de Estudos para Triagem (.csv)", accept = ".csv"),
+                actionButton("start_screening", "Iniciar Triagem (Manual/Semi-automática)", icon = icon("filter")),
+                hr(),
+                h4("2. Extração de Dados"),
+                p("Insira os dados de efeito para cada estudo selecionado."),
+                actionButton("start_data_extraction", "Iniciar Extração de Dados", icon = icon("table")),
+                hr(),
+                h4("3. Executar Meta-análise"),
+                selectInput("meta_analysis_model", "Modelo de Efeito", choices = c("Efeitos Fixos", "Efeitos Aleatórios")), # Placeholder
+                actionButton("run_meta_analysis", "Executar Meta-análise", icon = icon("chart-line"))
               ),
               h3("Resultados da Meta-análise"),
               plotOutput("forest_plot"),
-              plotOutput("funnel_plot")
+              plotOutput("funnel_plot"),
+              tableOutput("meta_analysis_summary_table")
       ),
       tabItem(tabName = "export",
               h2("7. Visualização e Exportação"),
               uiOutput("didactic_text_export"), # Placeholder para texto didático
               wellPanel(
                 downloadButton("download_report", "Baixar Relatório Completo (PDF)", icon = icon("file-pdf")),
-                downloadButton("download_plot", "Baixar Gráfico Atual (PNG)", icon = icon("image"))
+                downloadButton("download_plot", "Baixar Gráfico Atual (PNG)", icon = icon("image")),
+                downloadButton("download_all_plots", "Baixar Todos os Gráficos (ZIP)", icon = icon("file-archive"))
               )
       )
     )

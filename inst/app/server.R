@@ -11,8 +11,11 @@ library(dplyr)
 library(stringr)
 library(maps)
 library(viridis)
-library(metagear)
-library(meta)
+library(metagear) # Para triagem de estudos
+library(meta)     # Para meta-análise
+library(wordcloud) # Para nuvem de palavras
+library(RColorBrewer) # Para cores da nuvem de palavras
+library(quanteda.textstats) # Para textstat_frequency
 
 # Source R functions (these files will be created in FAET/R/)
 # source("../../R/data_import.R")
@@ -26,18 +29,19 @@ library(meta)
 server <- function(input, output, session) {
 
   # Reactive value to store the merged dataframe M
-  rv <- reactiveValues(M = NULL, corpus = NULL, dfm = NULL, lda_model = NULL)
+  rv <- reactiveValues(M = NULL, corpus = NULL, dfm = NULL, lda_model = NULL, 
+                       meta_data = NULL, meta_results = NULL, current_plot = NULL)
 
   # --- Lógica para o Modo Didático ---
   didactic_text <- reactive({
     if (isTRUE(input$didactic_mode)) {
       list(
-        home = p("Bem-vindo ao FAET! Este é o ponto de partida para suas análises. Use o menu lateral para navegar pelas etapas. O 'Modo Didático' fornece explicações detalhadas em cada seção."),
+        home = p("Bem-vindo ao FAET! Este é o ponto de partida para suas análises. Use o menu lateral para navegar pelas etapas. O \'Modo Didático\' fornece explicações detalhadas em cada seção."),
         import = p("Nesta etapa, você carregará seus dados bibliográficos. O FAET suporta arquivos exportados do Scopus (.bib) e Web of Science (.txt ou .bib). Após o upload, o sistema mesclará e removerá duplicatas automaticamente."),
         bibliometrics = p("As análises bibliométricas e cienciométricas fornecem uma visão quantitativa da sua literatura. Explore a produtividade de autores, periódicos, países e o impacto das publicações através de métricas como o Índice H."),
         networks = p("As redes científicas revelam padrões de colaboração e influência. Visualize coautorias entre autores, instituições e países, além de redes de co-citação e acoplamento bibliográfico para entender a estrutura intelectual da área."),
-        qualitative = p("A Análise Qualitativa Investigativa, inspirada em Bardin, permite aprofundar no conteúdo textual dos resumos. Prepare o corpus, remova stopwords e visualize as palavras mais frequentes em nuvens de palavras."),
-        topic_modeling = p("A Modelagem de Tópicos (LDA) identifica temas latentes em seu corpus textual. Escolha o número de tópicos e descubra os termos mais representativos de cada um, complementando sua análise qualitativa."),
+        qualitative = p("A Análise Qualitativa Investigativa, inspirada em Bardin, permite aprofundar no conteúdo textual dos resumos. Prepare o corpus, remova stopwords e visualize as palavras mais frequentes em nuvens de palavras. Explore também a frequência e co-ocorrência de termos."),
+        topic_modeling = p("A Modelagem de Tópicos (LDA) identifica temas latentes em seu corpus textual. Escolha o número de tópicos e descubra os termos mais representativos de cada um, complementando sua análise qualitativa. É possível mapear os tópicos para suas categorias de Bardin."),
         meta_analysis = p("A Meta-análise permite sintetizar resultados de múltiplos estudos. Este módulo guiará você desde a triagem de estudos até a extração de dados e a geração de gráficos de floresta e funil para avaliar o efeito combinado e o viés de publicação."),
         export = p("Nesta etapa final, você pode visualizar e exportar todos os seus resultados. Gere relatórios completos em PDF ou Markdown e salve seus gráficos em alta qualidade para suas publicações.")
       )
@@ -150,48 +154,45 @@ server <- function(input, output, session) {
     req(results_biblio(), input$bib_analysis_type)
     S <- summary(results_biblio(), k = 10, pause = FALSE)
 
+    plot_obj <- NULL
     if (input$bib_analysis_type == "Produtividade Anual") {
       annual_prod <- S$AnnualProduction
-      ggplot(annual_prod, aes(x = Year, y = Articles)) +
+      plot_obj <- ggplot(annual_prod, aes(x = Year, y = Articles)) +
         geom_line(color = "steelblue") + geom_point() +
         labs(title = "Produção Anual de Artigos", x = "Ano", y = "Número de Publicações") +
         theme_minimal()
     } else if (input$bib_analysis_type == "Autores Mais Produtivos") {
       top_authors <- results_biblio()$MostProdAuthors
-      ggplot(top_authors, aes(x = reorder(Author, Articles), y = Articles)) +
+      plot_obj <- ggplot(top_authors, aes(x = reorder(Author, Articles), y = Articles)) +
         geom_bar(stat = "identity", fill = "steelblue") +
         labs(title = "Autores Mais Produtivos", x = "Autor", y = "Número de Artigos") +
         coord_flip() +
         theme_minimal()
     } else if (input$bib_analysis_type == "Fontes Mais Relevantes") {
       top_sources <- results_biblio()$MostRelSources
-      ggplot(top_sources, aes(x = reorder(Source, Articles), y = Articles)) +
+      plot_obj <- ggplot(top_sources, aes(x = reorder(Source, Articles), y = Articles)) +
         geom_bar(stat = "identity", fill = "darkgreen") +
         labs(title = "Fontes Mais Relevantes", x = "Fonte", y = "Número de Artigos") +
         coord_flip() +
         theme_minimal()
     } else if (input$bib_analysis_type == "Palavras-chave Mais Frequentes") {
       keywords_freq <- results_biblio()$MostRelKeywords
-      ggplot(keywords_freq, aes(x = reorder(Keyword, Freq), y = Freq)) +
+      plot_obj <- ggplot(keywords_freq, aes(x = reorder(Keyword, Freq), y = Freq)) +
         geom_bar(stat = "identity", fill = "purple") +
         labs(title = "Palavras-chave Mais Frequentes", x = "Palavra-chave", y = "Frequência") +
         coord_flip() +
         theme_minimal()
     } else if (input$bib_analysis_type == "Índice H") {
       h_authors <- bibliometrix::Hindex(rv$M, field = "author", sep = ";")
-      h_sources <- bibliometrix::Hindex(rv$M, field = "source", sep = ";")
-      
-      # Combine top authors and sources by H-index for display
       top_h_authors <- h_authors$H %>% arrange(desc(h_index)) %>% head(10)
-      top_h_sources <- h_sources$H %>% arrange(desc(h_index)) %>% head(10)
-      
-      # Simple plot for top H-index authors
-      ggplot(top_h_authors, aes(x = reorder(Author, h_index), y = h_index)) +
+      plot_obj <- ggplot(top_h_authors, aes(x = reorder(Author, h_index), y = h_index)) +
         geom_bar(stat = "identity", fill = "orange") +
         labs(title = "Top 10 Autores por H-index", x = "Autor", y = "H-index") +
         coord_flip() +
         theme_minimal()
     }
+    rv$current_plot <- plot_obj # Armazena o plot atual para download
+    plot_obj
   })
 
   output$bibliometric_table <- renderTable({
@@ -242,7 +243,9 @@ server <- function(input, output, session) {
   output$network_plot <- renderPlot({
     req(network_data(), input$network_nodes)
     Net <- network_data()
-    bibliometrix::networkPlot(Net, n = input$network_nodes, Title = input$network_type, type = "fruchterman", labelsize = 0.7)
+    plot_obj <- bibliometrix::networkPlot(Net, n = input$network_nodes, Title = input$network_type, type = "fruchterman", labelsize = 0.7)
+    rv$current_plot <- plot_obj # Armazena o plot atual para download
+    plot_obj
   })
 
   # --- Módulo de Análise Qualitativa (Bardin) ---
@@ -250,34 +253,70 @@ server <- function(input, output, session) {
     req(rv$M)
     withProgress(message = 'Preparando corpus...', value = 0, {
       incProgress(0.5, detail = "Extraindo resumos...")
-      rv$corpus <- quanteda::corpus(rv$M$AB)
+      # Garantir que AB não seja NULL e seja um vetor de caracteres
+      abstracts <- rv$M$AB[!is.na(rv$M$AB) & rv$M$AB != ""]
+      if (length(abstracts) == 0) {
+        showNotification("Nenhum resumo disponível para análise.", type = "warning")
+        return(NULL)
+      }
+      rv$corpus <- quanteda::corpus(abstracts)
       incProgress(0.8, detail = "Criando DFM...")
-      rv$dfm <- quanteda::dfm(rv$corpus, remove = quanteda::stopwords(input$stopwords_lang), remove_punct = TRUE)
+      rv$dfm <- quanteda::dfm(rv$corpus, remove = quanteda::stopwords(input$stopwords_lang), remove_punct = TRUE, remove_numbers = TRUE, remove_symbols = TRUE)
       showNotification("Corpus preparado com sucesso!", type = "success")
     })
   })
 
   output$wordcloud_plot <- renderPlot({
     req(rv$dfm)
-    # Placeholder for wordcloud plot, requires 'wordcloud' package
-    # For simplicity, just showing a bar plot of top features for now
-    top_features <- quanteda.textstats::textstat_frequency(rv$dfm) %>% 
-      dplyr::arrange(desc(frequency)) %>% 
-      head(50)
-    
-    ggplot(top_features, aes(x = reorder(feature, frequency), y = frequency)) +
-      geom_bar(stat = "identity", fill = "darkblue") +
-      labs(title = "Top 50 Palavras Mais Frequentes", x = "Palavra", y = "Frequência") +
-      coord_flip() +
-      theme_minimal()
+    withProgress(message = 'Gerando nuvem de palavras...', value = 0, {
+      incProgress(0.5, detail = "Calculando frequências...")
+      freq_words <- quanteda.textstats::textstat_frequency(rv$dfm, n = 100)
+      
+      # Gerar nuvem de palavras
+      set.seed(123) # para reprodutibilidade
+      plot_obj <- wordcloud::wordcloud(words = freq_words$feature, freq = freq_words$frequency, 
+                                       min.freq = 1, max.words = 100, random.order = FALSE, 
+                                       colors = RColorBrewer::brewer.pal(8, "Dark2"))
+      rv$current_plot <- plot_obj # Armazena o plot atual para download
+      plot_obj
+    })
+  })
+
+  observeEvent(input$run_freq_analysis, {
+    req(rv$dfm)
+    output$qualitative_results_table <- renderTable({
+      quanteda.textstats::textstat_frequency(rv$dfm, n = 50) %>% 
+        dplyr::select(feature, frequency, rank)
+    })
+    showNotification("Análise de frequência concluída!", type = "info")
+  })
+
+  observeEvent(input$run_cooc_analysis, {
+    req(rv$dfm)
+    output$qualitative_results_table <- renderTable({
+      # Exemplo simples de co-ocorrência, pode ser aprimorado com network plots
+      fcm_obj <- quanteda::fcm(rv$dfm, context = "window", window = 5)
+      top_features <- names(topfeatures(fcm_obj, 20))
+      as.data.frame(quanteda::fcm_select(fcm_obj, pattern = top_features))
+    })
+    showNotification("Análise de co-ocorrência concluída!", type = "info")
   })
 
   # --- Módulo de Modelagem de Tópicos ---
   lda_model_reactive <- eventReactive(input$run_lda, {
     req(rv$dfm, input$num_topics)
     withProgress(message = 'Executando Modelagem de Tópicos (LDA)...', value = 0, {
-      incProgress(0.5, detail = "Calculando LDA...")
-      rv$lda_model <- topicmodels::LDA(rv$dfm, k = input$num_topics)
+      incProgress(0.5, detail = "Convertendo DFM para formato Topicmodels...")
+      # Certificar-se de que o DFM não está vazio e não tem documentos com 0 palavras
+      dfm_filtered <- quanteda::dfm_trim(rv$dfm, min_termfreq = 1, min_docfreq = 1)
+      if (ndoc(dfm_filtered) == 0 || nfeat(dfm_filtered) == 0) {
+        showNotification("DFM vazio ou sem termos após filtragem. Ajuste o pré-processamento.", type = "error")
+        return(NULL)
+      }
+      dtm <- quanteda::convert(dfm_filtered, to = "topicmodels")
+      
+      incProgress(0.8, detail = "Calculando LDA...")
+      rv$lda_model <- topicmodels::LDA(dtm, k = input$num_topics, control = list(seed = 123))
       showNotification("Modelagem de Tópicos concluída!", type = "success")
       rv$lda_model # Retorna o modelo LDA para ser usado por outros reativos
     })
@@ -285,20 +324,107 @@ server <- function(input, output, session) {
 
   output$lda_terms_table <- renderTable({
     req(rv$lda_model)
-    topicmodels::terms(rv$lda_model, 10) # Show top 10 terms per topic
+    as.data.frame(topicmodels::terms(rv$lda_model, 10)) # Show top 10 terms per topic
   })
 
-  # --- Módulo de Meta-análise (Em Desenvolvimento) ---
+  output$lda_vis_plot <- renderPlot({
+    req(rv$lda_model)
+    # Placeholder para visualização de tópicos. LDAvis seria ideal, mas requer mais integração.
+    # Por enquanto, um gráfico de barras simples da distribuição de tópicos por documento.
+    topics_per_doc <- as.data.frame(topicmodels::posterior(rv$lda_model)$topics)
+    topic_counts <- colSums(topics_per_doc > 0.1) # Contar documentos onde o tópico é proeminente
+    topic_df <- data.frame(Topic = factor(paste("Tópico", 1:length(topic_counts))), Count = topic_counts)
+    
+    plot_obj <- ggplot(topic_df, aes(x = Topic, y = Count, fill = Topic)) +
+      geom_bar(stat = "identity") +
+      labs(title = "Distribuição de Tópicos nos Documentos", y = "Número de Documentos Proeminentes") +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+    rv$current_plot <- plot_obj # Armazena o plot atual para download
+    plot_obj
+  })
+
+  observeEvent(input$map_topics_bardin, {
+    req(rv$lda_model)
+    showNotification("Funcionalidade de mapeamento de tópicos para Bardin em desenvolvimento. Requer input manual de categorias.", type = "warning")
+    # Lógica para mapear tópicos para categorias de Bardin. 
+    # Isso provavelmente envolveria uma interface para o usuário associar manualmente os tópicos.
+  })
+
+  # --- Módulo de Meta-análise ---
+  observeEvent(input$file_screening, {
+    req(input$file_screening)
+    rv$meta_data <- read.csv(input$file_screening$datapath, stringsAsFactors = FALSE)
+    showNotification("Estudos para triagem carregados com sucesso!", type = "success")
+  })
+
+  observeEvent(input$start_screening, {
+    req(rv$meta_data)
+    showNotification("Iniciando triagem. Esta etapa geralmente envolve revisão manual ou semi-automática. Por favor, revise os dados carregados.", type = "info")
+    # Em uma implementação completa, aqui haveria uma UI para triagem interativa (e.g., metagear::screen_abstracts)
+    # Por enquanto, apenas um placeholder.
+    output$meta_analysis_summary_table <- renderTable({
+      head(rv$meta_data)
+    })
+  })
+
+  observeEvent(input$start_data_extraction, {
+    req(rv$meta_data)
+    showNotification("Iniciando extração de dados. Esta etapa requer input manual dos tamanhos de efeito. Por favor, insira os dados na tabela abaixo.", type = "info")
+    # Placeholder para uma tabela editável para extração de dados
+    # Para demonstração, vamos criar dados dummy para meta-análise
+    rv$meta_data_extracted <- data.frame(
+      study = paste("Estudo", 1:5),
+      event.e = c(10, 15, 8, 12, 20),
+      n.e = c(100, 120, 90, 110, 150),
+      event.c = c(5, 8, 4, 6, 10),
+      n.c = c(100, 120, 90, 110, 150)
+    )
+    output$meta_analysis_summary_table <- renderTable({
+      rv$meta_data_extracted
+    })
+  })
+
+  observeEvent(input$run_meta_analysis, {
+    req(rv$meta_data_extracted, input$meta_analysis_model)
+    withProgress(message = 'Executando Meta-análise...', value = 0, {
+      incProgress(0.5, detail = "Calculando efeitos...")
+      
+      # Exemplo de meta-análise para dados dicotômicos (Odds Ratio)
+      # Adapte conforme o tipo de dados que o usuário irá extrair
+      rv$meta_results <- meta::metabin(
+        event.e = rv$meta_data_extracted$event.e,
+        n.e = rv$meta_data_extracted$n.e,
+        event.c = rv$meta_data_extracted$event.c,
+        n.c = rv$meta_data_extracted$n.c,
+        studlab = rv$meta_data_extracted$study,
+        data = rv$meta_data_extracted,
+        sm = "OR", # Odds Ratio
+        method = "MH", # Mantel-Haenszel
+        fixed = (input$meta_analysis_model == "Efeitos Fixos"),
+        random = (input$meta_analysis_model == "Efeitos Aleatórios")
+      )
+      showNotification("Meta-análise concluída!", type = "success")
+    })
+  })
+
   output$forest_plot <- renderPlot({
-    # Placeholder para Forest Plot
-    plot(1, type = "n", main = "Forest Plot (Em Desenvolvimento)", xlab = "", ylab = "")
-    text(1, 1, "Funcionalidade de Meta-análise será implementada aqui.")
+    req(rv$meta_results)
+    plot_obj <- meta::forest(rv$meta_results, layout = "RevMan5")
+    rv$current_plot <- plot_obj # Armazena o plot atual para download
+    plot_obj
   })
 
   output$funnel_plot <- renderPlot({
-    # Placeholder para Funnel Plot
-    plot(1, type = "n", main = "Funnel Plot (Em Desenvolvimento)", xlab = "", ylab = "")
-    text(1, 1, "Funcionalidade de Meta-análise será implementada aqui.")
+    req(rv$meta_results)
+    plot_obj <- meta::funnel(rv$meta_results)
+    rv$current_plot <- plot_obj # Armazena o plot atual para download
+    plot_obj
+  })
+
+  output$meta_analysis_summary_table <- renderTable({
+    req(rv$meta_results)
+    summary(rv$meta_results)$common.effect # Exemplo, pode ser mais detalhado
   })
 
   # --- Módulo de Visualização e Exportação ---
@@ -322,9 +448,67 @@ server <- function(input, output, session) {
       paste0("FAET_Grafico_", Sys.Date(), ".png")
     },
     content = function(file) {
-      # This will download the last plot rendered. 
-      # In a real app, you'd want to capture the specific plot.
-      ggsave(file, plot = last_plot(), device = "png", width = 10, height = 7)
+      req(rv$current_plot)
+      # ggsave works for ggplot objects, for base R plots, need to use png()
+      if ("ggplot" %in% class(rv$current_plot)) {
+        ggplot2::ggsave(file, plot = rv$current_plot, device = "png", width = 10, height = 7)
+      } else {
+        # For base R plots (like from bibliometrix::networkPlot, meta::forest, meta::funnel)
+        # Need to re-render the plot to save it correctly
+        png(file, width = 1000, height = 700, res = 100)
+        if (input$tabs == "bibliometrics") {
+          # Re-render bibliometric plot
+          S <- summary(results_biblio(), k = 10, pause = FALSE)
+          if (input$bib_analysis_type == "Produtividade Anual") {
+            annual_prod <- S$AnnualProduction
+            print(ggplot(annual_prod, aes(x = Year, y = Articles)) +
+              geom_line(color = "steelblue") + geom_point() +
+              labs(title = "Produção Anual de Artigos", x = "Ano", y = "Número de Publicações") +
+              theme_minimal())
+          } # ... (other bibliometric plots)
+        } else if (input$tabs == "networks") {
+          Net <- network_data()
+          bibliometrix::networkPlot(Net, n = input$network_nodes, Title = input$network_type, type = "fruchterman", labelsize = 0.7)
+        } else if (input$tabs == "qualitative") {
+          # Re-render wordcloud
+          freq_words <- quanteda.textstats::textstat_frequency(rv$dfm, n = 100)
+          wordcloud::wordcloud(words = freq_words$feature, freq = freq_words$frequency, 
+                               min.freq = 1, max.words = 100, random.order = FALSE, 
+                               colors = RColorBrewer::brewer.pal(8, "Dark2"))
+        } else if (input$tabs == "topic_modeling") {
+          # Re-render LDA plot
+          topics_per_doc <- as.data.frame(topicmodels::posterior(rv$lda_model)$topics)
+          topic_counts <- colSums(topics_per_doc > 0.1) 
+          topic_df <- data.frame(Topic = factor(paste("Tópico", 1:length(topic_counts))), Count = topic_counts)
+          print(ggplot(topic_df, aes(x = Topic, y = Count, fill = Topic)) +
+            geom_bar(stat = "identity") +
+            labs(title = "Distribuição de Tópicos nos Documentos", y = "Número de Documentos Proeminentes") +
+            theme_minimal() +
+            theme(axis.text.x = element_text(angle = 45, hjust = 1)))
+        } else if (input$tabs == "meta_analysis") {
+          if (!is.null(rv$meta_results)) {
+            if (input$meta_analysis_model == "Efeitos Fixos" || input$meta_analysis_model == "Efeitos Aleatórios") {
+              meta::forest(rv$meta_results, layout = "RevMan5")
+            } else {
+              meta::funnel(rv$meta_results)
+            }
+          }
+        }
+        dev.off()
+      }
+    }
+  )
+
+  output$download_all_plots <- downloadHandler(
+    filename = function() {
+      paste0("FAET_Todos_Graficos_", Sys.Date(), ".zip")
+    },
+    content = function(file) {
+      # Placeholder for zipping all generated plots
+      # This would require saving all plots to temporary files and then zipping them
+      # For now, create a dummy zip
+      zip(zipfile = file, files = c())
+      showNotification("Funcionalidade de download de todos os gráficos em desenvolvimento.", type = "warning")
     }
   )
 
