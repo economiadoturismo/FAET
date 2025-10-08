@@ -1,5 +1,6 @@
 library(shiny)
 library(shinydashboard)
+library(shinyWidgets) # Para switchInput
 library(bibliometrix)
 library(quanteda)
 library(topicmodels)
@@ -10,6 +11,8 @@ library(dplyr)
 library(stringr)
 library(maps)
 library(viridis)
+library(metagear)
+library(meta)
 
 # Source R functions (these files will be created in FAET/R/)
 # source("../../R/data_import.R")
@@ -17,23 +20,83 @@ library(viridis)
 # source("../../R/network_analysis.R")
 # source("../../R/qualitative_analysis.R")
 # source("../../R/topic_modeling.R")
+# source("../../R/meta_analysis.R") # Novo arquivo para meta-análise
 # source("../../R/visualization.R")
 
 server <- function(input, output, session) {
 
   # Reactive value to store the merged dataframe M
-  rv <- reactiveValues(M = NULL, corpus = NULL, dfm = NULL)
+  rv <- reactiveValues(M = NULL, corpus = NULL, dfm = NULL, lda_model = NULL)
+
+  # --- Lógica para o Modo Didático ---
+  didactic_text <- reactive({
+    if (isTRUE(input$didactic_mode)) {
+      list(
+        home = p("Bem-vindo ao FAET! Este é o ponto de partida para suas análises. Use o menu lateral para navegar pelas etapas. O 'Modo Didático' fornece explicações detalhadas em cada seção."),
+        import = p("Nesta etapa, você carregará seus dados bibliográficos. O FAET suporta arquivos exportados do Scopus (.bib) e Web of Science (.txt ou .bib). Após o upload, o sistema mesclará e removerá duplicatas automaticamente."),
+        bibliometrics = p("As análises bibliométricas e cienciométricas fornecem uma visão quantitativa da sua literatura. Explore a produtividade de autores, periódicos, países e o impacto das publicações através de métricas como o Índice H."),
+        networks = p("As redes científicas revelam padrões de colaboração e influência. Visualize coautorias entre autores, instituições e países, além de redes de co-citação e acoplamento bibliográfico para entender a estrutura intelectual da área."),
+        qualitative = p("A Análise Qualitativa Investigativa, inspirada em Bardin, permite aprofundar no conteúdo textual dos resumos. Prepare o corpus, remova stopwords e visualize as palavras mais frequentes em nuvens de palavras."),
+        topic_modeling = p("A Modelagem de Tópicos (LDA) identifica temas latentes em seu corpus textual. Escolha o número de tópicos e descubra os termos mais representativos de cada um, complementando sua análise qualitativa."),
+        meta_analysis = p("A Meta-análise permite sintetizar resultados de múltiplos estudos. Este módulo guiará você desde a triagem de estudos até a extração de dados e a geração de gráficos de floresta e funil para avaliar o efeito combinado e o viés de publicação."),
+        export = p("Nesta etapa final, você pode visualizar e exportar todos os seus resultados. Gere relatórios completos em PDF ou Markdown e salve seus gráficos em alta qualidade para suas publicações.")
+      )
+    } else {
+      list(
+        home = NULL, import = NULL, bibliometrics = NULL, networks = NULL,
+        qualitative = NULL, topic_modeling = NULL, meta_analysis = NULL, export = NULL
+      )
+    }
+  })
+
+  output$didactic_text_import <- renderUI({ didactic_text()$import })
+  output$didactic_text_bibliometrics <- renderUI({ didactic_text()$bibliometrics })
+  output$didactic_text_networks <- renderUI({ didactic_text()$networks })
+  output$didactic_text_qualitative <- renderUI({ didactic_text()$qualitative })
+  output$didactic_text_topic_modeling <- renderUI({ didactic_text()$topic_modeling })
+  output$didactic_text_meta_analysis <- renderUI({ didactic_text()$meta_analysis })
+  output$didactic_text_export <- renderUI({ didactic_text()$export })
+
+  # --- Lógica para o Cronograma Visual de Etapas ---
+  output$progress_timeline <- renderUI({
+    current_tab <- input$tabs
+    steps <- c("home", "import_preprocess", "bibliometrics", "networks", "qualitative", "topic_modeling", "meta_analysis", "export")
+    step_names <- c("Início", "Importação", "Bibliometria", "Redes", "Qualitativa", "Tópicos", "Meta-análise", "Exportação")
+
+    # Determinar o status de cada etapa
+    status <- sapply(steps, function(s) {
+      if (s == current_tab) {
+        return("active")
+      } else if (match(s, steps) < match(current_tab, steps)) {
+        return("completed")
+      } else {
+        return("pending")
+      }
+    })
+
+    # Renderizar a timeline
+    div(class = "timeline",
+        lapply(seq_along(steps), function(i) {
+          div(class = paste0("timeline-item ", status[i]),
+              icon(switch(status[i],
+                          "completed" = "check-circle",
+                          "active" = "arrow-alt-circle-right",
+                          "pending" = "circle"
+              )),
+              span(step_names[i])
+          )
+        })
+    )
+  })
 
   # --- Módulo de Importação e Pré-processamento ---
   observeEvent(input$process_data, {
     req(input$file_scopus, input$file_wos)
 
-    # Placeholder for data import and merge logic
-    # In a real package, these would call functions from data_import.R
     withProgress(message = 'Processando dados...', value = 0, {
       incProgress(0.2, detail = "Importando Scopus...")
       scopus_df <- tryCatch({
-        convert2df(file = input$file_scopus$datapath, dbsource = "scopus", format = "bibtex")
+        bibliometrix::convert2df(file = input$file_scopus$datapath, dbsource = "scopus", format = "bibtex")
       }, error = function(e) {
         showNotification(paste("Erro ao importar Scopus:", e$message), type = "error")
         return(NULL)
@@ -42,7 +105,7 @@ server <- function(input, output, session) {
       incProgress(0.4, detail = "Importando Web of Science...")
       wos_df <- tryCatch({
         # Handle multiple WoS files if necessary, for simplicity, taking the first one
-        convert2df(file = input$file_wos$datapath[1], dbsource = "wos", format = "plaintext")
+        bibliometrix::convert2df(file = input$file_wos$datapath[1], dbsource = "wos", format = "plaintext")
       }, error = function(e) {
         showNotification(paste("Erro ao importar WoS:", e$message), type = "error")
         return(NULL)
@@ -51,7 +114,7 @@ server <- function(input, output, session) {
       if (!is.null(scopus_df) && !is.null(wos_df)) {
         incProgress(0.6, detail = "Mesclando e deduplicando...")
         rv$M <- tryCatch({
-          mergeDbSources(scopus_df, wos_df, remove.duplicated = TRUE, verbose = FALSE)
+          bibliometrix::mergeDbSources(scopus_df, wos_df, remove.duplicated = TRUE, verbose = FALSE)
         }, error = function(e) {
           showNotification(paste("Erro ao mesclar dados:", e$message), type = "error")
           return(NULL)
@@ -80,7 +143,7 @@ server <- function(input, output, session) {
   # --- Módulo de Análise Bibliométrica e Cienciométrica ---
   results_biblio <- reactive({
     req(rv$M)
-    biblioAnalysis(rv$M, sep = ";")
+    bibliometrix::biblioAnalysis(rv$M, sep = ";")
   })
 
   output$bibliometric_plot <- renderPlot({
@@ -115,8 +178,8 @@ server <- function(input, output, session) {
         coord_flip() +
         theme_minimal()
     } else if (input$bib_analysis_type == "Índice H") {
-      h_authors <- Hindex(rv$M, field = "author", sep = ";")
-      h_sources <- Hindex(rv$M, field = "source", sep = ";")
+      h_authors <- bibliometrix::Hindex(rv$M, field = "author", sep = ";")
+      h_sources <- bibliometrix::Hindex(rv$M, field = "source", sep = ";")
       
       # Combine top authors and sources by H-index for display
       top_h_authors <- h_authors$H %>% arrange(desc(h_index)) %>% head(10)
@@ -144,8 +207,8 @@ server <- function(input, output, session) {
     } else if (input$bib_analysis_type == "Palavras-chave Mais Frequentes") {
       results_biblio()$MostRelKeywords
     } else if (input$bib_analysis_type == "Índice H") {
-      h_authors <- Hindex(rv$M, field = "author", sep = ";")
-      h_sources <- Hindex(rv$M, field = "source", sep = ";")
+      h_authors <- bibliometrix::Hindex(rv$M, field = "author", sep = ";")
+      h_sources <- bibliometrix::Hindex(rv$M, field = "source", sep = ";")
       
       list("Autores com Maior H-index" = h_authors$H %>% arrange(desc(h_index)) %>% head(10),
            "Fontes com Maior H-index" = h_sources$H %>% arrange(desc(h_index)) %>% head(10))
@@ -158,28 +221,28 @@ server <- function(input, output, session) {
     M_temp <- rv$M
     
     if (input$network_type == "Colaboração (Países)") {
-      M_temp <- metaTagExtraction(M_temp, Field = "AU_CO", sep = ";")
-      biblioNetwork(M_temp, analysis = "collaboration", network = "countries", sep = ";")
+      M_temp <- bibliometrix::metaTagExtraction(M_temp, Field = "AU_CO", sep = ";")
+      bibliometrix::biblioNetwork(M_temp, analysis = "collaboration", network = "countries", sep = ";")
     } else if (input$network_type == "Colaboração (Autores)") {
-      biblioNetwork(M_temp, analysis = "collaboration", network = "authors", sep = ";")
+      bibliometrix::biblioNetwork(M_temp, analysis = "collaboration", network = "authors", sep = ";")
     } else if (input$network_type == "Colaboração (Instituições)") {
-      M_temp <- metaTagExtraction(M_temp, Field = "AU_UN", sep = ";")
-      biblioNetwork(M_temp, analysis = "collaboration", network = "universities", sep = ";")
+      M_temp <- bibliometrix::metaTagExtraction(M_temp, Field = "AU_UN", sep = ";")
+      bibliometrix::biblioNetwork(M_temp, analysis = "collaboration", network = "universities", sep = ";")
     } else if (input$network_type == "Co-citação (Autores)") {
-      biblioNetwork(M_temp, analysis = "co-citation", network = "authors", sep = ";")
+      bibliometrix::biblioNetwork(M_temp, analysis = "co-citation", network = "authors", sep = ";")
     } else if (input$network_type == "Co-citação (Fontes)") {
-      biblioNetwork(M_temp, analysis = "co-citation", network = "sources", sep = ";")
+      bibliometrix::biblioNetwork(M_temp, analysis = "co-citation", network = "sources", sep = ";")
     } else if (input$network_type == "Acoplamento (Autores)") {
-      biblioNetwork(M_temp, analysis = "coupling", network = "authors", sep = ";")
+      bibliometrix::biblioNetwork(M_temp, analysis = "coupling", network = "authors", sep = ";")
     } else if (input$network_type == "Acoplamento (Fontes)") {
-      biblioNetwork(M_temp, analysis = "coupling", network = "sources", sep = ";")
+      bibliometrix::biblioNetwork(M_temp, analysis = "coupling", network = "sources", sep = ";")
     }
   })
 
   output$network_plot <- renderPlot({
     req(network_data(), input$network_nodes)
     Net <- network_data()
-    networkPlot(Net, n = input$network_nodes, Title = input$network_type, type = "fruchterman", labelsize = 0.7)
+    bibliometrix::networkPlot(Net, n = input$network_nodes, Title = input$network_type, type = "fruchterman", labelsize = 0.7)
   })
 
   # --- Módulo de Análise Qualitativa (Bardin) ---
@@ -187,9 +250,9 @@ server <- function(input, output, session) {
     req(rv$M)
     withProgress(message = 'Preparando corpus...', value = 0, {
       incProgress(0.5, detail = "Extraindo resumos...")
-      rv$corpus <- corpus(rv$M$AB)
+      rv$corpus <- quanteda::corpus(rv$M$AB)
       incProgress(0.8, detail = "Criando DFM...")
-      rv$dfm <- dfm(rv$corpus, remove = stopwords(input$stopwords_lang), remove_punct = TRUE)
+      rv$dfm <- quanteda::dfm(rv$corpus, remove = quanteda::stopwords(input$stopwords_lang), remove_punct = TRUE)
       showNotification("Corpus preparado com sucesso!", type = "success")
     })
   })
@@ -198,8 +261,8 @@ server <- function(input, output, session) {
     req(rv$dfm)
     # Placeholder for wordcloud plot, requires 'wordcloud' package
     # For simplicity, just showing a bar plot of top features for now
-    top_features <- textstat_frequency(rv$dfm) %>% 
-      arrange(desc(frequency)) %>% 
+    top_features <- quanteda.textstats::textstat_frequency(rv$dfm) %>% 
+      dplyr::arrange(desc(frequency)) %>% 
       head(50)
     
     ggplot(top_features, aes(x = reorder(feature, frequency), y = frequency)) +
@@ -214,13 +277,28 @@ server <- function(input, output, session) {
     req(rv$dfm, input$num_topics)
     withProgress(message = 'Executando Modelagem de Tópicos (LDA)...', value = 0, {
       incProgress(0.5, detail = "Calculando LDA...")
-      LDA(rv$dfm, k = input$num_topics)
+      rv$lda_model <- topicmodels::LDA(rv$dfm, k = input$num_topics)
+      showNotification("Modelagem de Tópicos concluída!", type = "success")
+      rv$lda_model # Retorna o modelo LDA para ser usado por outros reativos
     })
   })
 
   output$lda_terms_table <- renderTable({
-    req(lda_model_reactive())
-    terms(lda_model_reactive(), 10) # Show top 10 terms per topic
+    req(rv$lda_model)
+    topicmodels::terms(rv$lda_model, 10) # Show top 10 terms per topic
+  })
+
+  # --- Módulo de Meta-análise (Em Desenvolvimento) ---
+  output$forest_plot <- renderPlot({
+    # Placeholder para Forest Plot
+    plot(1, type = "n", main = "Forest Plot (Em Desenvolvimento)", xlab = "", ylab = "")
+    text(1, 1, "Funcionalidade de Meta-análise será implementada aqui.")
+  })
+
+  output$funnel_plot <- renderPlot({
+    # Placeholder para Funnel Plot
+    plot(1, type = "n", main = "Funnel Plot (Em Desenvolvimento)", xlab = "", ylab = "")
+    text(1, 1, "Funcionalidade de Meta-análise será implementada aqui.")
   })
 
   # --- Módulo de Visualização e Exportação ---
@@ -251,7 +329,4 @@ server <- function(input, output, session) {
   )
 
 }
-
-# Run the application
-# shinyApp(ui = ui, server = server)
 
