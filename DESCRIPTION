@@ -1,30 +1,39 @@
 Package: FAET
 Title: Ferramenta de Análise e Exploração de Turismo
-Version: 0.1.0
+Version: 0.1.1
 Author: Manus AI <manus.ai@example.com>
 Maintainer: Manus AI <manus.ai@example.com>
 Authors@R: 
     person("Manus", "AI", 
            email = "manus.ai@example.com", 
            role = c("aut", "cre"))
-Description: Um pacote R e aplicativo Shiny para revisão sistemática, meta-análise, análise bibliométrica, cienciométrica, qualitativa (Bardin) e modelagem de tópicos, com foco em turismo.
+Description: Um pacote R e aplicativo Shiny para revisão sistemática, meta-análise, análise bibliométrica, cienciométrica, qualitativa (Bardin) e modelagem de tópicos, com foco em turismo. Oferece uma interface intuitiva e didática para pesquisadores de turismo.
 License: MIT
 Encoding: UTF-8
 LazyData: true
 RoxygenNote: 7.3.1
 Imports:
-    bibliometrix,
-    shiny,
-    shinydashboard,
-    quanteda,
-    topicmodels,
-    ggplot2,
-    igraph,
-    plotly,
-    dplyr,
-    stringr,
-    maps,
-    viridis,
-    metagear,
-    meta
+    bibliometrix (>= 3.2.1),
+    shiny (>= 1.8.0),
+    shinydashboard (>= 0.7.2),
+    quanteda (>= 3.3.0),
+    topicmodels (>= 0.2.14),
+    ggplot2 (>= 3.4.0),
+    igraph (>= 1.5.0),
+    plotly (>= 4.10.0),
+    dplyr (>= 1.1.0),
+    stringr (>= 1.5.0),
+    maps (>= 3.4.1),
+    viridis (>= 0.6.2),
+    metagear (>= 1.4.0),
+    meta (>= 6.0-0),
+    wordcloud (>= 2.6),
+    RColorBrewer (>= 1.1-3),
+    quanteda.textstats (>= 0.9.3),
+    shinyWidgets (>= 0.8.0),
+    magrittr (>= 2.0.3)
+Suggests:
+    testthat (>= 3.1.0),
+    rmarkdown (>= 2.20),
+    knitr (>= 1.42)
 
