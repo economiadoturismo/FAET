@@ -49,12 +49,31 @@ dashboardPage(
               h2("1. Importação e Pré-processamento de Dados"),
               uiOutput("didactic_text_import"), # Placeholder para texto didático
               wellPanel(
+                h3("Passo 1: Carregar Dados do Scopus"),
+                p("Exporte seus resultados de pesquisa do Scopus como um arquivo BibTeX (.bib)."),
+                tags$ul(
+                  tags$li("No Scopus, selecione os documentos desejados."),
+                  tags$li("Clique em 'Export' e escolha o formato 'BibTeX'."),
+                  tags$li("Salve o arquivo e faça o upload abaixo.")
+                ),
                 fileInput("file_scopus", "Escolha o arquivo Scopus (.bib)", accept = ".bib"),
-                fileInput("file_wos", "Escolha o arquivo Web of Science (.txt ou .bib)", accept = c(".txt", ".bib"), multiple = TRUE),
-                actionButton("process_data", "Processar Dados", icon = icon("cogs"))
+                hr(),
+                h3("Passo 2: Carregar Dados da Web of Science (WoS)"),
+                p("Exporte seus resultados de pesquisa da Web of Science como um arquivo Plain Text (.txt) ou BibTeX (.bib)."),
+                tags$ul(
+                  tags$li("Na Web of Science, selecione os documentos desejados."),
+                  tags$li("Clique em 'Export' e escolha o formato 'Plain Text' ou 'BibTeX'."),
+                  tags$li("Salve o arquivo e faça o upload abaixo. Você pode fazer upload de múltiplos arquivos se necessário.")
+                ),
+                fileInput("file_wos", "Escolha o(s) arquivo(s) Web of Science (.txt ou .bib)", accept = c(".txt", ".bib"), multiple = TRUE),
+                hr(),
+                h3("Passo 3: Processar e Mesclar Dados"),
+                p("Após carregar os arquivos, clique no botão abaixo para processar, mesclar e deduplic ar os dados."),
+                actionButton("process_data", "Processar e Mesclar Dados", icon = icon("cogs"), class = "btn-primary btn-lg")
               ),
-              h3("Dados Importados"),
-tableOutput("imported_data_summary")
+              h3("Resumo dos Dados Importados"),
+              uiOutput("import_status_message"), # Mensagem de status da importação
+              tableOutput("imported_data_summary")
       ),
       tabItem(tabName = "bibliometrics",
               h2("2. Análise Bibliométrica e Cienciométrica"),
