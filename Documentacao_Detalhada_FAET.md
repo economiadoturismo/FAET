@@ -1,6 +1,6 @@
 # Documentação Detalhada do Pacote FAET: Arquitetura, UI/UX e Abordagens Metodológicas
 
-**Autor:** Manus AI
+**Autor:** Ailson 
 **Data:** 07 de Outubro de 2025
 
 ## 1. Introdução: O Pacote FAET como Ferramenta Didática para Pesquisadores de Turismo
