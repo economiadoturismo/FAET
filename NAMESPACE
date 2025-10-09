@@ -7,10 +7,14 @@ importFrom(topicmodels, LDA, terms)
 importFrom(ggplot2, ggplot, aes, geom_line, geom_point, labs, theme_minimal, geom_polygon, coord_fixed, scale_fill_viridis, theme_void)
 importFrom(igraph, graph_from_data_frame, layout_with_fr, V, E)
 importFrom(plotly, ggplotly)
-importFrom(dplyr, "%>%", select, filter, mutate, arrange)
+importFrom(dplyr, select, filter, mutate, arrange)
 importFrom(stringr, str_to_lower)
 importFrom(maps, map_data)
 importFrom(viridis, scale_fill_viridis)
 importFrom(metagear, screen_abstracts, extract_data)
 importFrom(meta, metagen, forest.meta)
+
+
+
+export(run_app)
 

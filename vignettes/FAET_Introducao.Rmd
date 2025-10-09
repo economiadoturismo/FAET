@@ -1,0 +1,77 @@
+---
+title: "Introdução ao Pacote FAET"
+author: "Manus AI"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Introdução ao Pacote FAET}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Bem-vindo ao FAET
+
+Este é um guia introdutório ao pacote FAET, uma ferramenta poderosa e didática para pesquisadores de turismo que desejam realizar análises bibliométricas, cienciométricas, qualitativas e meta-análises de forma simplificada.
+
+### Instalação
+
+Para instalar a versão de desenvolvimento do FAET diretamente do GitHub, você pode usar o pacote `remotes`:
+
+```R
+# install.packages("remotes") # Descomente e execute se ainda não tiver o pacote remotes
+remotes::install_github("economiadoturismo/FAET")
+```
+
+Uma vez que o pacote esteja no CRAN, a instalação será ainda mais simples:
+
+```R
+install.packages("FAET")
+```
+
+### Iniciando o Aplicativo Shiny
+
+Após a instalação, você pode iniciar a interface gráfica do usuário do FAET com um único comando:
+
+```R
+library(FAET)
+FAET::run_app()
+```
+
+### Fluxo de Trabalho
+
+O aplicativo FAET guia o usuário através de um fluxo de trabalho intuitivo, dividido em etapas:
+
+1.  **Importação & Pré-processamento**: Carregue seus dados do Scopus e Web of Science.
+2.  **Análise Bibliométrica & Cienciométrica**: Explore métricas de produtividade e impacto.
+3.  **Análise de Redes**: Visualize redes de colaboração e co-citação.
+4.  **Análise Qualitativa (Bardin)**: Prepare o corpus e realize análises de frequência e co-ocorrência.
+5.  **Modelagem de Tópicos**: Identifique temas latentes com LDA.
+6.  **Meta-análise**: Sintetize resultados de múltiplos estudos.
+7.  **Visualização & Exportação**: Exporte seus resultados e relatórios.
+
+### Exemplo de Uso (Importação de Dados)
+
+```{r eval=FALSE}
+# Supondo que você tenha arquivos .bib e .txt exportados
+# No aplicativo Shiny, você faria o upload desses arquivos.
+# Aqui, um exemplo de como seria o processamento interno:
+
+# library(bibliometrix)
+# scopus_file <- "caminho/para/seu/scopus.bib"
+# wos_file <- "caminho/para/seu/wos.txt"
+
+# scopus_df <- convert2df(file = scopus_file, dbsource = "scopus", format = "bibtex")
+# wos_df <- convert2df(file = wos_file, dbsource = "wos", format = "plaintext")
+
+# M <- mergeDbSources(scopus_df, wos_df, remove.duplicated = TRUE)
+# summary(M)
+```
+
+Este vignette será expandido com exemplos detalhados para cada módulo do FAET.
