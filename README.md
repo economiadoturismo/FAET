@@ -1,6 +1,5 @@
-# FAET - Ferramenta de Análise e Exploração de Turismo
+# FAET - Ferramenta de Análise em Estudos do Turismo
 
-![FAET Logo](https://raw.githubusercontent.com/economiadoturismo/FAET/master/inst/app/www/faet_logo.png)
 
 O **FAET** (Ferramenta de Análise e Exploração de Turismo) é um pacote R e um aplicativo Shiny projetado para auxiliar pesquisadores da área de turismo na realização de análises complexas de literatura científica. Ele oferece uma abordagem integrada para:
 
